@@ -73,6 +73,7 @@ Each returns:
   "recommendation": "BUY | SELL | HOLD",
   "confidence": 0.0–1.0
 }
+```
 
 ## Aggregation (No AI here)
 
@@ -92,4 +93,4 @@ This prevents:
 final_recommendation = BUY | SELL | HOLD | REVIEW | FALLBACK
 
 ## Running
-``python fsm.py``
+```python fsm.py```
