@@ -16,10 +16,14 @@ class TradeState(TypedDict):
     final_recommendation: Optional[Literal["BUY", "SELL", "HOLD", "REVIEW"]]
     final_confidence: float
     trace: Annotated[List[str], Topic(list)]
+    a_attempts: Annotated[int, LastValue(int)]
+    b_attempts: Annotated[int, LastValue(int)]
 
 # ---- Nodes (LLM inside) ----
 
 def agent_a_node(state: TradeState):
+    attempt = state["a_attempts"] + 1
+
     try:
         data = call_llm(agent_a_prompt("TMPV"))
         return {
@@ -27,15 +31,19 @@ def agent_a_node(state: TradeState):
                 "recommendation": data["recommendation"],
                 "confidence": float(data["confidence"])
             },
-            "trace": ["agent_a"]
+            "a_attempts": attempt,
+            "trace": [f"agent_a_attempt_{attempt}"]
         }
     except Exception:
         return {
             "agent_a": None,
-            "trace": ["agent_b"]
+            "a_attempts": attempt,
+            "trace": [f"agent_a_failed_{attempt}"]
         }
 
 def agent_b_node(state: TradeState):
+    attempt = state["b_attempts"] + 1
+    
     try:
         data = call_llm(agent_b_prompt("TMPV"))
         return {
@@ -43,12 +51,14 @@ def agent_b_node(state: TradeState):
                 "recommendation": data["recommendation"],
                 "confidence": float(data["confidence"])
             },
-            "trace": state["trace"] + ["agent_b"]
+            "b_attempts": attempt,
+            "trace": [f"agent_b_attempt_{attempt}"]
         }
     except Exception:
         return {
             "agent_b": None,
-            "trace": state["trace"] + ["agent_b_failed"]
+            "b_attempts": attempt,
+            "trace": [f"agent_b_failed_{attempt}"]
         }
 
 def aggregate_node(state: TradeState):
@@ -91,6 +101,8 @@ def policy_node(state: TradeState):
         "trace": state["trace"] + ["policy"]
     }
 
+# ---- Routers ----
+
 def policy_router(state: TradeState) -> str:
     if state["final_recommendation"] in ["BUY", "SELL", "HOLD"]:
         return "EXECUTE"
@@ -98,6 +110,18 @@ def policy_router(state: TradeState) -> str:
         return "REVIEW"
     else:
         return "FALLBACK"
+
+MAX_RETRIES = 2
+
+def agent_a_router(state: TradeState):
+    if state["agent_a"] is None and state["a_attempts"] <= MAX_RETRIES:
+        return "RETRY"
+    return "DONE"
+
+def agent_b_router(state: TradeState):
+    if state["agent_b"] is None and state["b_attempts"] <= MAX_RETRIES:
+        return "RETRY"
+    return "DONE"
 
 
 # ---- Graph ----
@@ -126,13 +150,15 @@ graph.add_edge("agent_b", "aggregate")
 
 
 graph.add_conditional_edges(
-    "policy",
-    policy_router,
-    {
-        "EXECUTE": END,
-        "REVIEW": END,
-        "FALLBACK": END,
-    },
+    "agent_a",
+    agent_a_router,
+    {"RETRY": "agent_a", "DONE": "aggregate"}
+)
+
+graph.add_conditional_edges(
+    "agent_b",
+    agent_b_router,
+    {"RETRY": "agent_b", "DONE": "aggregate"}
 )
 
 app = graph.compile()

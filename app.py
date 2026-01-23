@@ -21,9 +21,12 @@ def trade(req: TradeRequest):
         "agent_b": None,
         "final_recommendation": None,
         "final_confidence": 0.0,
-        "trace": []
+        "trace": [],
+        "a_attempts": 0,
+        "b_attempts": 0
     }
 
     result = graph_app.invoke(state)
+    print("state", result)
 
     return result
