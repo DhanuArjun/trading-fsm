@@ -15,6 +15,10 @@ class TradeResponse(BaseModel):
     final_confidence: float
     trace: list[str]
 
+@app.get("/")
+def root():
+    return {"message": "Trading AI Control Plane is running."}
+
 @app.post("/trade", response_model=TradeResponse)
 def trade(req: TradeRequest):
     state = {
@@ -25,7 +29,7 @@ def trade(req: TradeRequest):
         "trace": [],
         "a_attempts": 0,
         "b_attempts": 0,
-        "request_id": str(uuid4())
+        "request_id": str(uuid4()),
     }
 
     result = graph_app.invoke(state)
