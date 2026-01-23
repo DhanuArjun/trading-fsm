@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from graph import app as graph_app
+from uuid import uuid4
 
 app = FastAPI(title="Trading AI Control Plane")
 
@@ -23,10 +24,10 @@ def trade(req: TradeRequest):
         "final_confidence": 0.0,
         "trace": [],
         "a_attempts": 0,
-        "b_attempts": 0
+        "b_attempts": 0,
+        "request_id": str(uuid4())
     }
 
     result = graph_app.invoke(state)
-    print("state", result)
 
     return result

@@ -3,6 +3,8 @@ from langgraph.graph import StateGraph, END
 from llm import call_llm, agent_a_prompt, agent_b_prompt
 from typing_extensions import Annotated
 from langgraph.channels import LastValue, Topic
+from uuid import uuid4
+import json
 
 # ---- State Types ----
 
@@ -18,14 +20,26 @@ class TradeState(TypedDict):
     trace: Annotated[List[str], Topic(list)]
     a_attempts: Annotated[int, LastValue(int)]
     b_attempts: Annotated[int, LastValue(int)]
+    request_id: str
+
+def log_event(state, event, payload=None):
+    print(json.dumps({
+        "request_id": state["request_id"],
+        "event": event,
+        "a_attempts": state["a_attempts"],
+        "b_attempts": state["b_attempts"],
+        "payload": payload
+    }))
 
 # ---- Nodes (LLM inside) ----
 
 def agent_a_node(state: TradeState):
     attempt = state["a_attempts"] + 1
+    log_event(state, "agent_a_call")
 
     try:
         data = call_llm(agent_a_prompt("TMPV"))
+        log_event(state, "agent_a_result", data)
         return {
             "agent_a": {
                 "recommendation": data["recommendation"],
@@ -43,9 +57,11 @@ def agent_a_node(state: TradeState):
 
 def agent_b_node(state: TradeState):
     attempt = state["b_attempts"] + 1
+    log_event(state, "agent_b_call")
     
     try:
         data = call_llm(agent_b_prompt("TMPV"))
+        log_event(state, "agent_b_result", data)
         return {
             "agent_b": {
                 "recommendation": data["recommendation"],
@@ -62,6 +78,7 @@ def agent_b_node(state: TradeState):
         }
 
 def aggregate_node(state: TradeState):
+    log_event(state, "aggregate")
     A = state["agent_a"]
     B = state["agent_b"]
 
@@ -97,6 +114,7 @@ def aggregate_node(state: TradeState):
         }
 
 def policy_node(state: TradeState):
+    log_event(state, "policy")
     return {
         "trace": state["trace"] + ["policy"]
     }
