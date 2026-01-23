@@ -1,5 +1,8 @@
 from typing import Optional, TypedDict, Literal, List
 from langgraph.graph import StateGraph, END
+from llm import call_llm, agent_a_prompt, agent_b_prompt
+from typing_extensions import Annotated
+from langgraph.channels import LastValue, Topic
 
 # ---- State Types ----
 
@@ -8,54 +11,85 @@ class Signal(TypedDict):
     confidence: float
 
 class TradeState(TypedDict):
-    agent_a: Optional[Signal]
-    agent_b: Optional[Signal]
+    agent_a: Annotated[Optional[Signal], LastValue(Signal)]
+    agent_b: Annotated[Optional[Signal], LastValue(Signal)]
     final_recommendation: Optional[Literal["BUY", "SELL", "HOLD", "REVIEW"]]
     final_confidence: float
-    trace: List[str]
+    trace: Annotated[List[str], Topic(list)]
 
-# ---- Nodes (stubs for now) ----
+# ---- Nodes (LLM inside) ----
 
-def agent_a_node(state: TradeState) -> TradeState:
-    state["trace"].append("agent_a")
-    # We will plug in LLM next
-    state["agent_a"] = {"recommendation": "BUY", "confidence": 0.8}
-    return state
+def agent_a_node(state: TradeState):
+    try:
+        data = call_llm(agent_a_prompt("TMPV"))
+        return {
+            "agent_a": {
+                "recommendation": data["recommendation"],
+                "confidence": float(data["confidence"])
+            },
+            "trace": ["agent_a"]
+        }
+    except Exception:
+        return {
+            "agent_a": None,
+            "trace": ["agent_b"]
+        }
 
-def agent_b_node(state: TradeState) -> TradeState:
-    state["trace"].append("agent_b")
-    state["agent_b"] = {"recommendation": "HOLD", "confidence": 0.6}
-    return state
+def agent_b_node(state: TradeState):
+    try:
+        data = call_llm(agent_b_prompt("TMPV"))
+        return {
+            "agent_b": {
+                "recommendation": data["recommendation"],
+                "confidence": float(data["confidence"])
+            },
+            "trace": state["trace"] + ["agent_b"]
+        }
+    except Exception:
+        return {
+            "agent_b": None,
+            "trace": state["trace"] + ["agent_b_failed"]
+        }
 
-def aggregate_node(state: TradeState) -> TradeState:
-    state["trace"].append("aggregate")
-
+def aggregate_node(state: TradeState):
     A = state["agent_a"]
     B = state["agent_b"]
 
+    trace = state["trace"] + ["aggregate"]
+
     if not A or not B:
-        state["final_recommendation"] = None
-        state["final_confidence"] = 0.0
-        return state
+        return {
+            "final_recommendation": None,
+            "final_confidence": 0.0,
+            "trace": trace
+        }
 
     if A["recommendation"] != B["recommendation"]:
-        state["final_recommendation"] = "REVIEW"
-        state["final_confidence"] = 0.0
-        return state
+        return {
+            "final_recommendation": "REVIEW",
+            "final_confidence": 0.0,
+            "trace": trace
+        }
 
     min_conf = min(A["confidence"], B["confidence"])
-    if min_conf >= 0.7:
-        state["final_recommendation"] = A["recommendation"]
-        state["final_confidence"] = min_conf
-    else:
-        state["final_recommendation"] = "REVIEW"
-        state["final_confidence"] = min_conf
 
-    return state
+    if min_conf >= 0.7:
+        return {
+            "final_recommendation": A["recommendation"],
+            "final_confidence": min_conf,
+            "trace": trace
+        }
+    else:
+        return {
+            "final_recommendation": "REVIEW",
+            "final_confidence": min_conf,
+            "trace": trace
+        }
 
 def policy_node(state: TradeState):
-    state["trace"].append("policy")
-    return state
+    return {
+        "trace": state["trace"] + ["policy"]
+    }
 
 def policy_router(state: TradeState) -> str:
     if state["final_recommendation"] in ["BUY", "SELL", "HOLD"]:
@@ -75,11 +109,21 @@ graph.add_node("agent_b", agent_b_node)
 graph.add_node("aggregate", aggregate_node)
 graph.add_node("policy", policy_node)
 
-graph.set_entry_point("agent_a")
+graph.set_entry_point("fanout")
 
-graph.add_edge("agent_a", "agent_b")
+def fanout_node(state):
+    return {
+        "trace": ["fanout"]
+    }
+
+graph.add_node("fanout", fanout_node)
+
+graph.add_edge("fanout", "agent_a")
+graph.add_edge("fanout", "agent_b")
+
+graph.add_edge("agent_a", "aggregate")
 graph.add_edge("agent_b", "aggregate")
-graph.add_edge("aggregate", "policy")
+
 
 graph.add_conditional_edges(
     "policy",

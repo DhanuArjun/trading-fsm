@@ -1,44 +1,53 @@
-from openai import OpenAI
 import os
+import json
+import re
+from openai import OpenAI
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def call_llm(prompt):
+def call_llm(prompt: str) -> dict:
     resp = client.chat.completions.create(
         model="gpt-4o",
-        messages=[{"role":"user","content":prompt}],
+        messages=[{"role": "user", "content": prompt}],
         temperature=0.3
     )
-    return resp.choices[0].message.content
 
-def llm_call_agent_a():
-    prompt = """
-    You are an optimistic trading analyst.
-    You MUST always return JSON, even if data is incomplete.
-    If uncertain, set confidence low.
+    raw = resp.choices[0].message.content
 
-    Given stock TMPV and Q1 results,
-    output JSON only:
+    # strip markdown fences
+    raw = raw.strip()
+    raw = re.sub(r"^```json", "", raw)
+    raw = re.sub(r"```$", "", raw)
+    raw = raw.strip()
 
-    {
-      "recommendation": "BUY | SELL | HOLD",
-      "confidence": number between 0 and 1
-    }
-    """
-    return call_llm(prompt)
+    return json.loads(raw)
 
-def llm_call_agent_b():
-    prompt = """
-    You are a conservative risk analyst.
-    You MUST always return JSON, even if data is incomplete.
-    If uncertain, set confidence low.
+def agent_a_prompt(symbol: str):
+    return f"""
+You are an optimistic trading analyst.
+You MUST always return JSON.
+If uncertain, lower confidence.
 
-    Given stock TMPV and Q1 results,
-    output JSON only:
+Given stock {symbol} and recent results,
+output:
 
-    {
-      "recommendation": "BUY | SELL | HOLD",
-      "confidence": number between 0 and 1
-    }
-    """
-    return call_llm(prompt)
+{{
+  "recommendation": "BUY | SELL | HOLD",
+  "confidence": number between 0 and 1
+}}
+"""
+
+def agent_b_prompt(symbol: str):
+    return f"""
+You are a conservative risk analyst.
+You MUST always return JSON.
+If uncertain, lower confidence.
+
+Given stock {symbol} and recent results,
+output:
+
+{{
+  "recommendation": "BUY | SELL | HOLD",
+  "confidence": number between 0 and 1
+}}
+"""
