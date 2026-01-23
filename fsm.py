@@ -79,47 +79,6 @@ def policy_gate(state):
         return "FALLBACK"
 
 
-def generate_signal(state: TradeState) -> TradeState:
-    before = state.copy()
-    print("before signal call:", before)
-    attempts = state["attempts"] + 1
-    trace = state["trace"] + [f"signal_attempt_{attempts}"]
-
-    try:
-        print("calling llm...")
-        raw = llm_call()
-        print('raw response: {raw}')
-        data = extract_json(raw)
-        print("data", data)
-
-        confidence = float(data["confidence"])
-        recommendation = data["recommendation"]
-        print("confidence", confidence)
-
-        if not (0 <= confidence <= 1):
-            raise ValueError("bad confidence")
-
-        new_state = {
-            **state,
-            "confidence": confidence,
-            "recommendation": recommendation,
-            "attempts": attempts,
-            "trace": trace
-        }
-
-        log("signal", before, new_state)
-        return new_state
-
-    except Exception as e:
-        if attempts < MAX_RETRIES:
-            new_state = {**state, "attempts": attempts, "trace": trace}
-            log("signal_retry", before, new_state)
-            return new_state
-        else:
-            new_state = {**state, "confidence": 0.0, "attempts": attempts, "trace": trace}
-            log("signal_fail", before, new_state)
-            return new_state
-
 def agent_a_signal(state):
     before = state.copy()
     attempts = state["attempts_a"] + 1
@@ -216,10 +175,6 @@ def fallback(state):
     return new
 
 def run_fsm(state: TradeState):
-    # Run signal until valid or retries exhausted
-    while state["attempts"] < MAX_RETRIES and state["confidence"] == 0.0:
-        print("Generating signal...")
-        state = generate_signal(state)
 
     decision = policy_gate(state)
     print(f"Policy decision: {decision}")
