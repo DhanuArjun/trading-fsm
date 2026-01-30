@@ -6,14 +6,17 @@ class Signal(TypedDict):
     reason: Optional[str]
 
 class DecisionState(TypedDict):
-    domain: str                 # "trade", "hiring", ...
-    payload: Dict[str, Any]     # domain-specific input
+    domain: str
+    payload: dict
 
     agent_a: Optional[Signal]
     agent_b: Optional[Signal]
 
     final_recommendation: Optional[str]
     final_confidence: float
+
+    human_override: Optional[str]
+    human_reason: Optional[str]
 
     trace: List[str]
     a_attempts: int

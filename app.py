@@ -11,6 +11,11 @@ class TradeRequest(BaseModel):
 class HiringRequest(BaseModel):
     candidate_profile: str
 
+class HumanOverride(BaseModel):
+    request_id: str
+    decision: str
+    reason: str
+pending_reviews = {}
 
 @app.post("/trade")
 def trade(req: TradeRequest):
@@ -20,3 +25,14 @@ def trade(req: TradeRequest):
 @app.post("/hiring")
 def hiring(req: HiringRequest):
     return run_hiring_decision(req.candidate_profile)
+
+
+@app.post("/human/override")
+def human_override(req: HumanOverride):
+    state = pending_reviews.pop(req.request_id)
+
+    state["human_override"] = req.decision
+    state["human_reason"] = req.reason
+    state["final_recommendation"] = req.decision
+
+    return state
