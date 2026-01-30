@@ -78,6 +78,17 @@ def agent_b_node(state: DecisionState):
 
 
 # -------------------------
+# Human Review Node
+# -------------------------
+def human_review_node(state: DecisionState):
+    # system pauses here
+    log_event(state, "human_review_required")
+
+    return {
+        "trace": ["human_review"]
+    }
+
+# -------------------------
 # Retry routers
 # -------------------------
 def agent_a_router(state: DecisionState):
@@ -90,6 +101,13 @@ def agent_b_router(state: DecisionState):
         return "RETRY"
     return "DONE"
 
+# -------------------------
+# Policy router
+# -------------------------
+def policy_router(state: DecisionState):
+    if state["final_recommendation"] == "REVIEW":
+        return "HUMAN"
+    return "DONE"
 
 # -------------------------
 # Aggregate
@@ -128,6 +146,7 @@ graph = StateGraph(DecisionState)
 graph.add_node("agent_a", agent_a_node)
 graph.add_node("agent_b", agent_b_node)
 graph.add_node("aggregate", aggregate_node)
+graph.add_node("human", human_review_node)
 
 graph.set_entry_point("agent_a")
 
@@ -143,6 +162,15 @@ graph.add_conditional_edges(
     "agent_b",
     agent_b_router,
     {"RETRY": "agent_b", "DONE": "aggregate"}
+)
+
+graph.add_conditional_edges(
+    "aggregate",
+    policy_router,
+    {
+        "HUMAN": "human",
+        "DONE": "__end__"
+    }
 )
 
 graph.set_finish_point("aggregate")
