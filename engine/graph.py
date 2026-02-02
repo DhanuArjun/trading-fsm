@@ -1,3 +1,4 @@
+import time
 from typing_extensions import Annotated
 from typing import Optional, Literal
 from uuid import uuid4
@@ -8,6 +9,7 @@ from langgraph.channels import LastValue, Topic
 from engine.state import DecisionState, Signal
 from engine.logging import log_event
 from engine.llm import call_llm
+from engine.memory import write_memory
 
 MAX_RETRIES = 2
 
@@ -137,6 +139,23 @@ def aggregate_node(state: DecisionState):
         "trace": ["aggregate"]
     }
 
+# -------------------------
+# Memory persistence
+# -------------------------
+def persist_memory_node(state: DecisionState):
+    record = {
+        "request_id": state["request_id"],
+        "domain": state["domain"],
+        "input": state["payload"],
+        "agent_a": state["agent_a"],
+        "agent_b": state["agent_b"],
+        "final_recommendation": state["final_recommendation"],
+        "final_confidence": state["final_confidence"],
+        "human_override": state.get("human_override"),
+        "timestamp": time.time()
+    }
+    write_memory(record)
+    return {"trace": ["memory_written"]}
 
 # -------------------------
 # Graph definition

@@ -22,3 +22,14 @@ class DecisionState(TypedDict):
     a_attempts: int
     b_attempts: int
     request_id: str
+
+class MemoryRecord(TypedDict):
+    request_id: str
+    domain: str
+    input: dict
+    agent_a: Optional[Signal]
+    agent_b: Optional[Signal]
+    final_recommendation: str
+    final_confidence: float
+    human_override: Optional[str]
+    timestamp: float
